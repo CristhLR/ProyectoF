@@ -9,9 +9,9 @@ RUN go mod download
 COPY cmd ./cmd
 COPY internal ./internal
 
-RUN go build -o /app/api ./cmd/api
-RUN go build -o /app/worker ./cmd/worker
-RUN go build -o /app/seed ./cmd/seed
+RUN go build -o /app/api ./cmd/api \
+ && go build -o /app/worker ./cmd/worker \
+ && go build -o /app/seed ./cmd/seed
 
 FROM alpine:3.19
 WORKDIR /app
