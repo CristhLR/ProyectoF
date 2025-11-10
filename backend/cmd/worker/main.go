@@ -46,6 +46,28 @@ func main() {
 
 	log.Println("worker started, waiting for transmutaciones")
 
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				if err := checkMisiones(ctx, db); err != nil {
+					log.Printf("check misiones error: %v", err)
+				}
+				if err := checkMateriales(ctx, db); err != nil {
+					log.Printf("check materiales error: %v", err)
+				}
+				if err := checkTransmutaciones(ctx, db); err != nil {
+					log.Printf("check transmutaciones error: %v", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		if err := processNext(ctx, db, redisClient); err != nil {
 			log.Printf("process error: %v", err)
