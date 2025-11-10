@@ -1,12 +1,20 @@
 # syntax=docker/dockerfile:1
 
-FROM golang:1.24-alpine AS build
+FROM golang:1.22-alpine AS build
 WORKDIR /src
-COPY . .
+
+COPY go.mod ./
+RUN go mod download
+
+COPY cmd ./cmd
 RUN go build -o /app/api ./cmd/api
 
 FROM alpine:3.19
 WORKDIR /app
-COPY --from=build /app/api /app/api
+
+COPY --from=build /app/api ./api
+
 EXPOSE 8080
-CMD ["/app/api"]
+ENV PORT=8080
+
+CMD ["./api"]
