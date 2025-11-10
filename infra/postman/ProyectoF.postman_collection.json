@@ -1,0 +1,572 @@
+{
+  "info": {
+    "name": "ProyectoF API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /healthz",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/healthz",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "healthz"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /auth/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Nuevo Alquimista\",\n  \"email\": \"nuevo@example.com\",\n  \"password\": \"demo123\",\n  \"especialidad\": \"Metales\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"supervisor@demo.test\",\n  \"password\": \"demo123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Alquimistas",
+      "item": [
+        {
+          "name": "GET /alquimistas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alquimistas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alquimistas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /alquimistas/me",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alquimistas/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alquimistas",
+                "me"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /alquimistas",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Alquimista Invitado\",\n  \"email\": \"invitado@example.com\",\n  \"password\": \"demo123\",\n  \"rango\": \"alquimista\",\n  \"especialidad\": \"Hierbas\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/alquimistas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alquimistas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /alquimistas/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Alquimista Actualizado\",\n  \"especialidad\": \"Runas\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/alquimistas/2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alquimistas",
+                "2"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /alquimistas/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/alquimistas/3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "alquimistas",
+                "3"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Misiones",
+      "item": [
+        {
+          "name": "GET /misiones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/misiones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "misiones"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /misiones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"titulo\": \"Recolectar cristales\",\n  \"alquimista_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/misiones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "misiones"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /misiones/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"en_progreso\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/misiones/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "misiones",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /misiones/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/misiones/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "misiones",
+                "1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Materiales",
+      "item": [
+        {
+          "name": "GET /materiales",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/materiales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materiales"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /materiales",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Mercurio\",\n  \"stock\": 5\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materiales",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materiales"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /materiales/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stock\": 12\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/materiales/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materiales",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /materiales/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/materiales/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "materiales",
+                "1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transmutaciones",
+      "item": [
+        {
+          "name": "GET /transmutaciones",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /transmutaciones",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alquimista_id\": 2,\n  \"material_id\": 1,\n  \"costo\": 150.5,\n  \"resultado\": \"Lingote de oro\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones"
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /transmutaciones/{id}",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"estado\": \"procesando\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones",
+                "1"
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /transmutaciones/{id}",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones",
+                "1"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auditorias",
+      "item": [
+        {
+          "name": "GET /auditorias",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auditorias",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auditorias"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "authToken",
+      "value": ""
+    }
+  ]
+}
