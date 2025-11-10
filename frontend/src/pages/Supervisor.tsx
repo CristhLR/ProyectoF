@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client.ts';
 
@@ -31,6 +31,25 @@ const Supervisor = () => {
   const [materiales, setMateriales] = useState<Material[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  const loadData = useCallback(
+    async (options?: { shouldIgnore?: () => boolean }) => {
+      const [transmutacionesData, auditoriasData, materialesData] = await Promise.all([
+        apiFetch<Transmutacion[]>('/transmutaciones'),
+        apiFetch<Auditoria[]>('/auditorias'),
+        apiFetch<Material[]>('/materiales'),
+      ]);
+
+      if (options?.shouldIgnore?.()) {
+        return;
+      }
+
+      setTransmutaciones(transmutacionesData);
+      setAuditorias(auditoriasData);
+      setMateriales(materialesData);
+    },
+    []
+  );
+
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (!token) {
@@ -44,36 +63,48 @@ const Supervisor = () => {
       return;
     }
 
-    let active = true;
+    let ignore = false;
 
-    const loadData = async () => {
-      try {
-        const [transmutacionesData, auditoriasData, materialesData] = await Promise.all([
-          apiFetch<Transmutacion[]>('/transmutaciones'),
-          apiFetch<Auditoria[]>('/auditorias'),
-          apiFetch<Material[]>('/materiales'),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        setTransmutaciones(transmutacionesData);
-        setAuditorias(auditoriasData);
-        setMateriales(materialesData);
-      } catch (err) {
-        if (active) {
-          setError((err as Error).message);
-        }
+    loadData({ shouldIgnore: () => ignore }).catch((err) => {
+      if (!ignore) {
+        setError((err as Error).message);
       }
-    };
-
-    loadData();
+    });
 
     return () => {
-      active = false;
+      ignore = true;
     };
-  }, [navigate]);
+  }, [loadData, navigate]);
+
+  const resumenGeneral = useMemo(() => {
+    let aprobadas = 0;
+    let pendientes = 0;
+    let rechazadas = 0;
+
+    for (const transmutacion of transmutaciones) {
+      switch (transmutacion.estado) {
+        case 'aprobada':
+          aprobadas += 1;
+          break;
+        case 'pendiente':
+        case 'procesando':
+          pendientes += 1;
+          break;
+        case 'rechazada':
+          rechazadas += 1;
+          break;
+        default:
+          break;
+      }
+    }
+
+    return {
+      total: transmutaciones.length,
+      aprobadas,
+      pendientes,
+      rechazadas,
+    };
+  }, [transmutaciones]);
 
   const resumenEstados = useMemo(() => {
     return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
@@ -91,11 +122,34 @@ const Supervisor = () => {
     }, {});
   }, [materiales, transmutaciones]);
 
+  const totalAuditorias = auditorias.length;
+
+  const gestionarTransmutacion = async (id: number, accion: 'aprobar' | 'rechazar') => {
+    try {
+      await apiFetch(`/transmutaciones/${id}/${accion}`, { method: 'POST' });
+      await loadData();
+      setError(null);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
     <main>
       <h1>Panel de Supervisor</h1>
 
       {error && <p role="alert">{error}</p>}
+
+      <section>
+        <h2>Resumen</h2>
+        <ul>
+          <li>Total de transmutaciones: {resumenGeneral.total}</li>
+          <li>Transmutaciones aprobadas: {resumenGeneral.aprobadas}</li>
+          <li>Transmutaciones pendientes/procesando: {resumenGeneral.pendientes}</li>
+          <li>Transmutaciones rechazadas: {resumenGeneral.rechazadas}</li>
+          <li>Total de auditorías: {totalAuditorias}</li>
+        </ul>
+      </section>
 
       <section>
         <h2>Resumen de transmutaciones</h2>
@@ -137,6 +191,18 @@ const Supervisor = () => {
               <li key={transmutacion.id}>
                 #{transmutacion.id} - Alquimista {transmutacion.alquimista_id} - Material {transmutacion.material_id} - Estado: {transmutacion.estado} - Costo: {transmutacion.costo}
                 {transmutacion.resultado && ` - Resultado: ${transmutacion.resultado}`}
+                {(transmutacion.estado === 'pendiente' || transmutacion.estado === 'procesando') && (
+                  <span>
+                    {' '}
+                    <button type="button" onClick={() => gestionarTransmutacion(transmutacion.id, 'aprobar')}>
+                      Aprobar
+                    </button>
+                    {' '}
+                    <button type="button" onClick={() => gestionarTransmutacion(transmutacion.id, 'rechazar')}>
+                      Rechazar
+                    </button>
+                  </span>
+                )}
               </li>
             ))}
           </ul>
