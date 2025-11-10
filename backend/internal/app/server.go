@@ -104,6 +104,8 @@ func (s *Server) Router() http.Handler {
 	secured.HandleFunc("/transmutaciones/{id}", s.handleUpdateTransmutacion).Methods(http.MethodPut)
 	secured.HandleFunc("/transmutaciones/{id}", s.handleDeleteTransmutacion).Methods(http.MethodDelete)
 	secured.HandleFunc("/transmutaciones/{id}/procesar", s.handleProcessTransmutacion).Methods(http.MethodPost)
+	secured.HandleFunc("/transmutaciones/{id}/aprobar", s.handleApproveTransmutacion).Methods(http.MethodPost)
+	secured.HandleFunc("/transmutaciones/{id}/rechazar", s.handleRejectTransmutacion).Methods(http.MethodPost)
 
 	secured.HandleFunc("/auditorias", s.handleListAuditorias).Methods(http.MethodGet)
 
@@ -861,6 +863,116 @@ func (s *Server) handleProcessTransmutacion(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "en cola"})
+}
+
+func (s *Server) handleApproveTransmutacion(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSupervisor(r) {
+		writeError(w, http.StatusForbidden, "solo supervisores")
+		return
+	}
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+
+	var supervisor models.Alquimista
+	supervisorID, ok := s.currentUserID(r)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
+		return
+	}
+
+	if err := s.db.WithContext(r.Context()).First(&supervisor, supervisorID).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
+		return
+	}
+
+	var transmutacion models.Transmutacion
+	if err := s.db.WithContext(r.Context()).First(&transmutacion, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "transmutación no encontrada")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener la transmutación")
+		return
+	}
+
+	if transmutacion.Estado == models.EstadoTransmutacionAprobada {
+		writeError(w, http.StatusBadRequest, "la transmutación ya está aprobada")
+		return
+	}
+
+	transmutacion.Estado = models.EstadoTransmutacionAprobada
+	if err := s.db.WithContext(r.Context()).Save(&transmutacion).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo actualizar la transmutación")
+		return
+	}
+
+	s.recordAudit(r.Context(), "transmutaciones_manual", fmt.Sprintf("Transmutación %d aprobada por supervisor %s", transmutacion.ID, supervisor.Nombre))
+
+	if s.redisClient != nil {
+		if err := s.redisClient.Publish(r.Context(), redisNotificationsCh, fmt.Sprintf("%d", transmutacion.ID)).Err(); err != nil {
+			log.Printf("redis publish error: %v", err)
+		}
+	}
+
+	writeJSON(w, http.StatusOK, transmutacion)
+}
+
+func (s *Server) handleRejectTransmutacion(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSupervisor(r) {
+		writeError(w, http.StatusForbidden, "solo supervisores")
+		return
+	}
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+
+	var supervisor models.Alquimista
+	supervisorID, ok := s.currentUserID(r)
+	if !ok {
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
+		return
+	}
+
+	if err := s.db.WithContext(r.Context()).First(&supervisor, supervisorID).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
+		return
+	}
+
+	var transmutacion models.Transmutacion
+	if err := s.db.WithContext(r.Context()).First(&transmutacion, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "transmutación no encontrada")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener la transmutación")
+		return
+	}
+
+	if transmutacion.Estado == models.EstadoTransmutacionRechazada {
+		writeError(w, http.StatusBadRequest, "la transmutación ya está rechazada")
+		return
+	}
+	if transmutacion.Estado == models.EstadoTransmutacionAprobada {
+		writeError(w, http.StatusBadRequest, "la transmutación ya está aprobada")
+		return
+	}
+
+	transmutacion.Estado = models.EstadoTransmutacionRechazada
+	if err := s.db.WithContext(r.Context()).Save(&transmutacion).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo actualizar la transmutación")
+		return
+	}
+
+	s.recordAudit(r.Context(), "transmutaciones_manual", fmt.Sprintf("Transmutación %d rechazada por supervisor %s", transmutacion.ID, supervisor.Nombre))
+
+	writeJSON(w, http.StatusOK, transmutacion)
 }
 
 func (s *Server) handleNotificationsWS(w http.ResponseWriter, r *http.Request) {
