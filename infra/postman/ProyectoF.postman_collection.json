@@ -509,6 +509,29 @@
           }
         },
         {
+          "name": "POST /transmutaciones/{id}/procesar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones/1/procesar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones",
+                "1",
+                "procesar"
+              ]
+            }
+          }
+        },
+        {
           "name": "DELETE /transmutaciones/{id}",
           "request": {
             "method": "DELETE",

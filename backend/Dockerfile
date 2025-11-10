@@ -7,12 +7,14 @@ COPY go.mod ./
 RUN go mod download
 
 COPY cmd ./cmd
-RUN go build -o /app/api ./cmd/api
+RUN go build -o /app/api ./cmd/api \
+ && go build -o /app/worker ./cmd/worker
 
 FROM alpine:3.19
 WORKDIR /app
 
 COPY --from=build /app/api ./api
+COPY --from=build /app/worker ./worker
 
 EXPOSE 8080
 ENV PORT=8080
