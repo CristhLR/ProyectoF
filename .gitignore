@@ -1,0 +1,38 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+
+# Go
+/backend/bin/
+/backend/tmp/
+/backend/coverage/
+
+# Node/React
+node_modules/
+frontend/node_modules/
+frontend/.parcel-cache/
+frontend/.yarn/
+frontend/.pnp.*
+frontend/dist/
+frontend/build/
+frontend/coverage/
+
+# Environment & tooling
+.env
+.env.local
+.env.*.local
+/.idea/
+/.vscode/
+infra/postman/*.environment.json
+
+# Docker
+**/docker-data/
+pgdata/
+
+# Temporary files created by editors or tooling
+*.orig
+*.rej

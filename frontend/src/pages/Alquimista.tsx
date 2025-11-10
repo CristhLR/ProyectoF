@@ -57,6 +57,7 @@ const Alquimista = () => {
   const [costo, setCosto] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [notifications, setNotifications] = useState<string[]>([]);
 
   const fetchTransmutaciones = useCallback(async () => {
     if (!user) {
@@ -64,7 +65,11 @@ const Alquimista = () => {
     }
 
     const data = await apiFetch<Transmutacion[]>('/transmutaciones');
-    setTransmutaciones(data.filter((item) => item.alquimista_id === user.id));
+    setTransmutaciones(
+      data
+        .filter((item) => item.alquimista_id === user.id)
+        .sort((a, b) => a.id - b.id),
+    );
   }, [user]);
 
   useEffect(() => {
@@ -104,10 +109,11 @@ const Alquimista = () => {
   }, [fetchTransmutaciones, navigate, user]);
 
   useEffect(() => {
-    const socket = new WebSocket('ws://localhost:8080/ws/notificaciones');
+    const wsBase = import.meta.env.VITE_API_WS_URL ?? 'ws://localhost:8080';
+    const socket = new WebSocket(`${wsBase}/api/v1/ws/notificaciones`);
 
     socket.onmessage = (event) => {
-      alert(event.data);
+      setNotifications((prev) => [event.data, ...prev].slice(0, 5));
     };
 
     socket.onerror = () => {
@@ -146,7 +152,7 @@ const Alquimista = () => {
         }),
       });
 
-      setTransmutaciones((prev) => [...prev, nueva]);
+      setTransmutaciones((prev) => [...prev, nueva].sort((a, b) => a.id - b.id));
       setSelectedMaterial('');
       setCosto('');
     } catch (err) {
@@ -249,22 +255,53 @@ const Alquimista = () => {
         {transmutaciones.length === 0 ? (
           <p>Todavía no creaste transmutaciones.</p>
         ) : (
-          <ul>
-            {transmutaciones.map((transmutacion) => (
-              <li key={transmutacion.id}>
-                #{transmutacion.id} - {obtenerNombreMaterial(transmutacion.material_id)} - Estado: {transmutacion.estado}
-                <button
-                  type="button"
-                  onClick={() => handleProcesar(transmutacion.id)}
-                  disabled={transmutacion.estado !== 'pendiente'}
-                >
-                  Procesar
-                </button>
-              </li>
-            ))}
-          </ul>
+          <div style={{ overflowX: 'auto' }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Material</th>
+                  <th>Estado</th>
+                  <th>Costo</th>
+                  <th>Resultado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transmutaciones.map((transmutacion) => (
+                  <tr key={transmutacion.id}>
+                    <td>#{transmutacion.id}</td>
+                    <td>{obtenerNombreMaterial(transmutacion.material_id)}</td>
+                    <td>{transmutacion.estado}</td>
+                    <td>{transmutacion.costo.toFixed(2)}</td>
+                    <td>{transmutacion.resultado ?? '—'}</td>
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => handleProcesar(transmutacion.id)}
+                        disabled={transmutacion.estado !== 'pendiente'}
+                      >
+                        Procesar
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </section>
+
+      {notifications.length > 0 && (
+        <section>
+          <h2>Últimas notificaciones</h2>
+          <ul>
+            {notifications.map((message, index) => (
+              <li key={`${message}-${index}`}>{message}</li>
+            ))}
+          </ul>
+        </section>
+      )}
     </main>
   );
 };

@@ -71,39 +71,41 @@ func (s *Server) Router() http.Handler {
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	router.HandleFunc("/healthz", s.handleHealth).Methods(http.MethodGet)
-	router.HandleFunc("/ws/notificaciones", s.handleNotificationsWS).Methods(http.MethodGet)
-	router.HandleFunc("/auth/register", s.handleRegister).Methods(http.MethodPost)
-	router.HandleFunc("/auth/login", s.handleLogin).Methods(http.MethodPost)
-	router.PathPrefix("/").Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	router.HandleFunc("/api/v1/ws/notificaciones", s.handleNotificationsWS).Methods(http.MethodGet)
+
+	api := router.PathPrefix("/api/v1").Subrouter()
+	api.HandleFunc("/auth/register", s.handleRegister).Methods(http.MethodPost)
+	api.HandleFunc("/auth/login", s.handleLogin).Methods(http.MethodPost)
+	api.PathPrefix("/").Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	api := router.PathPrefix("").Subrouter()
-	api.Use(s.authMiddleware)
+	secured := api.PathPrefix("").Subrouter()
+	secured.Use(s.authMiddleware)
 
-	api.HandleFunc("/alquimistas", s.handleListAlquimistas).Methods(http.MethodGet)
-	api.HandleFunc("/alquimistas", s.handleCreateAlquimista).Methods(http.MethodPost)
-	api.HandleFunc("/alquimistas/{id}", s.handleUpdateAlquimista).Methods(http.MethodPut)
-	api.HandleFunc("/alquimistas/{id}", s.handleDeleteAlquimista).Methods(http.MethodDelete)
-	api.HandleFunc("/alquimistas/me", s.handleGetCurrentAlquimista).Methods(http.MethodGet)
+	secured.HandleFunc("/alquimistas", s.handleListAlquimistas).Methods(http.MethodGet)
+	secured.HandleFunc("/alquimistas", s.handleCreateAlquimista).Methods(http.MethodPost)
+	secured.HandleFunc("/alquimistas/{id}", s.handleUpdateAlquimista).Methods(http.MethodPut)
+	secured.HandleFunc("/alquimistas/{id}", s.handleDeleteAlquimista).Methods(http.MethodDelete)
+	secured.HandleFunc("/alquimistas/me", s.handleGetCurrentAlquimista).Methods(http.MethodGet)
 
-	api.HandleFunc("/misiones", s.handleListMisiones).Methods(http.MethodGet)
-	api.HandleFunc("/misiones", s.handleCreateMision).Methods(http.MethodPost)
-	api.HandleFunc("/misiones/{id}", s.handleUpdateMision).Methods(http.MethodPut)
-	api.HandleFunc("/misiones/{id}", s.handleDeleteMision).Methods(http.MethodDelete)
+	secured.HandleFunc("/misiones", s.handleListMisiones).Methods(http.MethodGet)
+	secured.HandleFunc("/misiones", s.handleCreateMision).Methods(http.MethodPost)
+	secured.HandleFunc("/misiones/{id}", s.handleUpdateMision).Methods(http.MethodPut)
+	secured.HandleFunc("/misiones/{id}", s.handleDeleteMision).Methods(http.MethodDelete)
 
-	api.HandleFunc("/materiales", s.handleListMateriales).Methods(http.MethodGet)
-	api.HandleFunc("/materiales", s.handleCreateMaterial).Methods(http.MethodPost)
-	api.HandleFunc("/materiales/{id}", s.handleUpdateMaterial).Methods(http.MethodPut)
-	api.HandleFunc("/materiales/{id}", s.handleDeleteMaterial).Methods(http.MethodDelete)
+	secured.HandleFunc("/materiales", s.handleListMateriales).Methods(http.MethodGet)
+	secured.HandleFunc("/materiales", s.handleCreateMaterial).Methods(http.MethodPost)
+	secured.HandleFunc("/materiales/{id}", s.handleUpdateMaterial).Methods(http.MethodPut)
+	secured.HandleFunc("/materiales/{id}", s.handleDeleteMaterial).Methods(http.MethodDelete)
 
-	api.HandleFunc("/transmutaciones", s.handleListTransmutaciones).Methods(http.MethodGet)
-	api.HandleFunc("/transmutaciones", s.handleCreateTransmutacion).Methods(http.MethodPost)
-	api.HandleFunc("/transmutaciones/{id}", s.handleUpdateTransmutacion).Methods(http.MethodPut)
-	api.HandleFunc("/transmutaciones/{id}", s.handleDeleteTransmutacion).Methods(http.MethodDelete)
-	api.HandleFunc("/transmutaciones/{id}/procesar", s.handleProcessTransmutacion).Methods(http.MethodPost)
+	secured.HandleFunc("/transmutaciones", s.handleListTransmutaciones).Methods(http.MethodGet)
+	secured.HandleFunc("/transmutaciones", s.handleCreateTransmutacion).Methods(http.MethodPost)
+	secured.HandleFunc("/transmutaciones/{id}", s.handleUpdateTransmutacion).Methods(http.MethodPut)
+	secured.HandleFunc("/transmutaciones/{id}", s.handleDeleteTransmutacion).Methods(http.MethodDelete)
+	secured.HandleFunc("/transmutaciones/{id}/procesar", s.handleProcessTransmutacion).Methods(http.MethodPost)
 
-	api.HandleFunc("/auditorias", s.handleListAuditorias).Methods(http.MethodGet)
+	secured.HandleFunc("/auditorias", s.handleListAuditorias).Methods(http.MethodGet)
 
 	cors := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),

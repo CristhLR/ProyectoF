@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -15,7 +16,11 @@ import (
 func InitDatabase() (*gorm.DB, error) {
 	dsn := os.Getenv("DB_DSN")
 	if dsn == "" {
-		return nil, errors.New("DB_DSN environment variable is required")
+		var err error
+		dsn, err = buildDSNFromEnv()
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
@@ -86,4 +91,37 @@ func seedDefaultUsers(db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+func buildDSNFromEnv() (string, error) {
+	host := getEnv("DB_HOST", "localhost")
+	port := getEnv("DB_PORT", "5432")
+	user := os.Getenv("DB_USER")
+	password := os.Getenv("DB_PASSWORD")
+	name := os.Getenv("DB_NAME")
+	sslMode := getEnv("DB_SSLMODE", "disable")
+
+	if user == "" || password == "" || name == "" {
+		return "", errors.New("database credentials (DB_USER, DB_PASSWORD, DB_NAME) are required")
+	}
+
+	options := []string{
+		fmt.Sprintf("host=%s", host),
+		fmt.Sprintf("port=%s", port),
+		fmt.Sprintf("user=%s", user),
+		fmt.Sprintf("password=%s", password),
+		fmt.Sprintf("dbname=%s", name),
+		fmt.Sprintf("sslmode=%s", sslMode),
+		"TimeZone=UTC",
+	}
+
+	return strings.Join(options, " "), nil
+}
+
+func getEnv(key, fallback string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback
+	}
+	return value
 }
