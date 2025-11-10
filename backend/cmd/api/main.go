@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/gorilla/mux"
+	"github.com/proyectof/backend/internal/app"
+	"github.com/proyectof/backend/internal/config"
 )
 
 func main() {
@@ -14,16 +15,23 @@ func main() {
 		port = "8080"
 	}
 
-	router := mux.NewRouter()
-	router.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	}).Methods(http.MethodGet)
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		log.Fatal("JWT_SECRET environment variable is required")
+	}
+
+	db, err := config.InitDatabase()
+	if err != nil {
+		log.Fatalf("failed to initialize database: %v", err)
+	}
+
+	server := app.NewServer(db, []byte(jwtSecret))
+	handler := server.Router()
 
 	addr := ":" + port
 	log.Printf("starting http server on %s", addr)
 
-	if err := http.ListenAndServe(addr, router); err != nil {
+	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("http server stopped: %v", err)
 	}
 }
