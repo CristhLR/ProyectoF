@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiFetch } from '../api/client.ts';
 
@@ -18,10 +18,17 @@ type Auditoria = {
   created_at: string;
 };
 
+type Material = {
+  id: number;
+  nombre: string;
+  stock: number;
+};
+
 const Supervisor = () => {
   const navigate = useNavigate();
   const [transmutaciones, setTransmutaciones] = useState<Transmutacion[]>([]);
   const [auditorias, setAuditorias] = useState<Auditoria[]>([]);
+  const [materiales, setMateriales] = useState<Material[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -41,9 +48,10 @@ const Supervisor = () => {
 
     const loadData = async () => {
       try {
-        const [transmutacionesData, auditoriasData] = await Promise.all([
+        const [transmutacionesData, auditoriasData, materialesData] = await Promise.all([
           apiFetch<Transmutacion[]>('/transmutaciones'),
           apiFetch<Auditoria[]>('/auditorias'),
+          apiFetch<Material[]>('/materiales'),
         ]);
 
         if (!active) {
@@ -52,6 +60,7 @@ const Supervisor = () => {
 
         setTransmutaciones(transmutacionesData);
         setAuditorias(auditoriasData);
+        setMateriales(materialesData);
       } catch (err) {
         if (active) {
           setError((err as Error).message);
@@ -66,11 +75,57 @@ const Supervisor = () => {
     };
   }, [navigate]);
 
+  const resumenEstados = useMemo(() => {
+    return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
+      acc[transmutacion.estado] = (acc[transmutacion.estado] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [transmutaciones]);
+
+  const usoMateriales = useMemo(() => {
+    const materialPorId = new Map(materiales.map((material) => [material.id, material.nombre] as const));
+    return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
+      const nombre = materialPorId.get(transmutacion.material_id) ?? `Material ${transmutacion.material_id}`;
+      acc[nombre] = (acc[nombre] ?? 0) + 1;
+      return acc;
+    }, {});
+  }, [materiales, transmutaciones]);
+
   return (
     <main>
       <h1>Panel de Supervisor</h1>
 
       {error && <p role="alert">{error}</p>}
+
+      <section>
+        <h2>Resumen de transmutaciones</h2>
+        {Object.keys(resumenEstados).length === 0 ? (
+          <p>No hay transmutaciones registradas.</p>
+        ) : (
+          <ul>
+            {Object.entries(resumenEstados).map(([estado, total]) => (
+              <li key={estado}>
+                {estado}: {total}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section>
+        <h2>Uso de materiales</h2>
+        {Object.keys(usoMateriales).length === 0 ? (
+          <p>Aún no se registraron consumos de materiales.</p>
+        ) : (
+          <ul>
+            {Object.entries(usoMateriales).map(([nombre, total]) => (
+              <li key={nombre}>
+                {nombre}: {total} transmutaciones
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
       <section>
         <h2>Transmutaciones</h2>

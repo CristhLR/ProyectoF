@@ -44,6 +44,10 @@ type Alquimista struct {
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
+func (Alquimista) TableName() string {
+	return "alquimistas"
+}
+
 type Mision struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Titulo       string    `gorm:"not null" json:"titulo"`
@@ -52,11 +56,19 @@ type Mision struct {
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
+func (Mision) TableName() string {
+	return "misiones"
+}
+
 type Material struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Nombre    string    `gorm:"uniqueIndex;not null" json:"nombre"`
 	Stock     int       `gorm:"not null" json:"stock"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (Material) TableName() string {
+	return "materiales"
 }
 
 type Transmutacion struct {
@@ -69,9 +81,17 @@ type Transmutacion struct {
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
+func (Transmutacion) TableName() string {
+	return "transmutaciones"
+}
+
 type Auditoria struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Tipo      string    `gorm:"not null" json:"tipo"`
 	Detalle   string    `gorm:"type:text" json:"detalle"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (Auditoria) TableName() string {
+	return "auditorias"
 }

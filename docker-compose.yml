@@ -1,56 +1,61 @@
 services:
   api:
-    build:
-      context: ./backend
+    image: golang:1.24
+    working_dir: /app
+    command: sh -c "go mod download && go run ./cmd/api"
+    volumes:
+      - ./backend:/app:delegated
+    environment:
+      PORT: 8080
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: alquimia
+      DB_PASSWORD: alquimia
+      DB_NAME: alquimia
+      DB_SSLMODE: disable
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: supersecreto
     ports:
       - "8080:8080"
-    env_file:
-      - .env
     depends_on:
-      - db
-      - redis
-
-  worker:
-    build:
-      context: ./backend
-    command: ["./worker"]
-    env_file:
-      - .env
-    depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   web:
-    build:
-      context: ./frontend
+    image: node:22
+    working_dir: /app
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    environment:
+      NODE_ENV: development
+      VITE_API_URL: http://api:8080
+      VITE_API_WS_URL: ws://api:8080
+    volumes:
+      - ./frontend:/app:delegated
     ports:
       - "3000:3000"
-    env_file:
-      - .env
     depends_on:
       - api
 
   db:
     image: postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: alquimia
+      POSTGRES_PASSWORD: alquimia
+      POSTGRES_DB: alquimia
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+      - ./backend/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   redis:
     image: redis:7
-
-  adminer:
-    image: adminer:latest
-    ports:
-      - "8081:8080"
+    command: ["redis-server", "--appendonly", "no"]
 
 volumes:
-  pgdata:
+  postgres-data:

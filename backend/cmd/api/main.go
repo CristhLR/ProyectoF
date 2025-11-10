@@ -2,9 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/proyectof/backend/internal/app"
 	"github.com/proyectof/backend/internal/config"
@@ -12,6 +16,9 @@ import (
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -38,20 +45,36 @@ func main() {
 	}
 
 	redisClient := redis.NewClient(redisOpts)
-	if err := redisClient.Ping(context.Background()).Err(); err != nil {
+	if err := redisClient.Ping(ctx).Err(); err != nil {
 		log.Fatalf("connect redis: %v", err)
 	}
-	defer func() {
-		_ = redisClient.Close()
-	}()
 
 	server := app.NewServer(db, []byte(jwtSecret), redisClient)
 	handler := server.Router()
 
-	addr := ":" + port
-	log.Printf("starting http server on %s", addr)
+	httpServer := &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
-	if err := http.ListenAndServe(addr, handler); err != nil {
-		log.Fatalf("http server stopped: %v", err)
+	go func() {
+		<-ctx.Done()
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := httpServer.Shutdown(shutdownCtx); err != nil {
+			log.Printf("error during http shutdown: %v", err)
+		}
+
+		if err := redisClient.Close(); err != nil {
+			log.Printf("error closing redis: %v", err)
+		}
+	}()
+
+	log.Printf("starting http server on %s", httpServer.Addr)
+
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		log.Fatalf("http server stopped unexpectedly: %v", err)
 	}
 }
