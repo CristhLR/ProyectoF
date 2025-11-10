@@ -1,20 +1,13 @@
 services:
   api:
-    image: golang:1.24
-    working_dir: /app
-    command: sh -c "go mod download && go run ./cmd/api"
-    volumes:
-      - ./backend:/app:delegated
+    build: ./backend
+    command: ["./api"]
+    env_file:
+      - .env
     environment:
-      PORT: 8080
-      DB_HOST: db
-      DB_PORT: "5432"
-      DB_USER: alquimia
-      DB_PASSWORD: alquimia
-      DB_NAME: alquimia
-      DB_SSLMODE: disable
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: supersecreto
+      DB_DSN: ${DB_DSN}
+      JWT_SECRET: ${JWT_SECRET}
+      REDIS_URL: ${REDIS_URL}
     ports:
       - "8080:8080"
     depends_on:
@@ -27,10 +20,12 @@ services:
     image: node:22
     working_dir: /app
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3000"
+    env_file:
+      - .env
     environment:
       NODE_ENV: development
-      VITE_API_URL: http://api:8080
-      VITE_API_WS_URL: ws://api:8080
+      VITE_API_URL: ${VITE_API_URL}
+      VITE_API_WS_URL: ${VITE_API_WS_URL}
     volumes:
       - ./frontend:/app:delegated
     ports:
@@ -46,12 +41,25 @@ services:
       POSTGRES_DB: alquimia
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ./backend/seed.sql:/docker-entrypoint-initdb.d/seed.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
+
+  worker:
+    build: ./backend
+    command: ["./worker"]
+    env_file:
+      - .env
+    environment:
+      DB_DSN: ${DB_DSN}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   redis:
     image: redis:7
