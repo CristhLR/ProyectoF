@@ -5,14 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 
@@ -26,13 +30,40 @@ const (
 	contextKeyRole   contextKey = "role"
 )
 
-type Server struct {
-	db        *gorm.DB
-	jwtSecret []byte
+const (
+	redisQueueKey        = "queue:transmutaciones"
+	redisNotificationsCh = "notifications:transmutaciones"
+)
+
+var wsUpgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		origin := r.Header.Get("Origin")
+		return origin == "" || origin == "http://localhost:3000"
+	},
 }
 
-func NewServer(db *gorm.DB, jwtSecret []byte) *Server {
-	return &Server{db: db, jwtSecret: jwtSecret}
+type Server struct {
+	db          *gorm.DB
+	jwtSecret   []byte
+	redisClient *redis.Client
+
+	wsMu      sync.Mutex
+	wsClients map[*websocket.Conn]struct{}
+}
+
+func NewServer(db *gorm.DB, jwtSecret []byte, redisClient *redis.Client) *Server {
+	server := &Server{
+		db:          db,
+		jwtSecret:   jwtSecret,
+		redisClient: redisClient,
+		wsClients:   make(map[*websocket.Conn]struct{}),
+	}
+
+	if redisClient != nil {
+		go server.listenForNotifications()
+	}
+
+	return server
 }
 
 func (s *Server) Router() http.Handler {
@@ -40,6 +71,7 @@ func (s *Server) Router() http.Handler {
 	router.Use(mux.CORSMethodMiddleware(router))
 
 	router.HandleFunc("/healthz", s.handleHealth).Methods(http.MethodGet)
+	router.HandleFunc("/ws/notificaciones", s.handleNotificationsWS).Methods(http.MethodGet)
 	router.HandleFunc("/auth/register", s.handleRegister).Methods(http.MethodPost)
 	router.HandleFunc("/auth/login", s.handleLogin).Methods(http.MethodPost)
 	router.PathPrefix("/").Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -69,6 +101,7 @@ func (s *Server) Router() http.Handler {
 	api.HandleFunc("/transmutaciones", s.handleCreateTransmutacion).Methods(http.MethodPost)
 	api.HandleFunc("/transmutaciones/{id}", s.handleUpdateTransmutacion).Methods(http.MethodPut)
 	api.HandleFunc("/transmutaciones/{id}", s.handleDeleteTransmutacion).Methods(http.MethodDelete)
+	api.HandleFunc("/transmutaciones/{id}/procesar", s.handleProcessTransmutacion).Methods(http.MethodPost)
 
 	api.HandleFunc("/auditorias", s.handleListAuditorias).Methods(http.MethodGet)
 
@@ -783,6 +816,114 @@ func (s *Server) handleDeleteTransmutacion(w http.ResponseWriter, r *http.Reques
 	s.recordAudit(r.Context(), "transmutaciones_delete", fmt.Sprintf("Transmutación %d eliminada", id))
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleProcessTransmutacion(w http.ResponseWriter, r *http.Request) {
+	if s.redisClient == nil {
+		writeError(w, http.StatusInternalServerError, "redis no configurado")
+		return
+	}
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+
+	var transmutacion models.Transmutacion
+	if err := s.db.WithContext(r.Context()).First(&transmutacion, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "transmutación no encontrada")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener la transmutación")
+		return
+	}
+
+	if transmutacion.Estado == models.EstadoTransmutacionAprobada {
+		writeError(w, http.StatusBadRequest, "la transmutación ya está aprobada")
+		return
+	}
+
+	if transmutacion.Estado != models.EstadoTransmutacionProcesando {
+		transmutacion.Estado = models.EstadoTransmutacionProcesando
+		if err := s.db.WithContext(r.Context()).Save(&transmutacion).Error; err != nil {
+			writeError(w, http.StatusInternalServerError, "no se pudo actualizar la transmutación")
+			return
+		}
+	}
+
+	if err := s.redisClient.RPush(r.Context(), redisQueueKey, transmutacion.ID).Err(); err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo encolar la transmutación")
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "en cola"})
+}
+
+func (s *Server) handleNotificationsWS(w http.ResponseWriter, r *http.Request) {
+	conn, err := wsUpgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Printf("websocket upgrade error: %v", err)
+		return
+	}
+
+	s.wsMu.Lock()
+	s.wsClients[conn] = struct{}{}
+	s.wsMu.Unlock()
+
+	go func() {
+		defer func() {
+			s.wsMu.Lock()
+			delete(s.wsClients, conn)
+			s.wsMu.Unlock()
+			_ = conn.Close()
+		}()
+
+		for {
+			if _, _, err := conn.ReadMessage(); err != nil {
+				break
+			}
+		}
+	}()
+}
+
+func (s *Server) listenForNotifications() {
+	ctx := context.Background()
+	for {
+		if s.redisClient == nil {
+			return
+		}
+
+		pubsub := s.redisClient.Subscribe(ctx, redisNotificationsCh)
+		for {
+			msg, err := pubsub.ReceiveMessage(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) {
+					_ = pubsub.Close()
+					return
+				}
+				log.Printf("redis subscription error: %v", err)
+				break
+			}
+			s.broadcastNotification(fmt.Sprintf("Transmutacion %s aprobada", msg.Payload))
+		}
+		_ = pubsub.Close()
+		time.Sleep(2 * time.Second)
+	}
+}
+
+func (s *Server) broadcastNotification(message string) {
+	s.wsMu.Lock()
+	defer s.wsMu.Unlock()
+
+	for conn := range s.wsClients {
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(message)); err != nil {
+			log.Printf("websocket send error: %v", err)
+			_ = conn.Close()
+			delete(s.wsClients, conn)
+		}
+	}
 }
 
 func (s *Server) handleListAuditorias(w http.ResponseWriter, r *http.Request) {
