@@ -24,6 +24,15 @@ type Material = {
   stock: number;
 };
 
+const ESTADO_COLORES: Record<string, string> = {
+  aprobada: '#16a34a',
+  pendiente: '#f59e0b',
+  procesando: '#6366f1',
+  rechazada: '#dc2626',
+};
+
+const MATERIAL_COLORES: string[] = ['#0ea5e9', '#8b5cf6', '#f97316', '#22c55e', '#ec4899', '#6366f1'];
+
 const Supervisor = () => {
   const navigate = useNavigate();
   const [transmutaciones, setTransmutaciones] = useState<Transmutacion[]>([]);
@@ -113,6 +122,17 @@ const Supervisor = () => {
     }, {});
   }, [transmutaciones]);
 
+  const totalEstados = useMemo(() => {
+    return Object.values(resumenEstados).reduce((acc, total) => acc + total, 0);
+  }, [resumenEstados]);
+
+  const descripcionEstados = useMemo(() => {
+    const resumen = Object.entries(resumenEstados)
+      .map(([estado, total]) => `${estado}: ${total}`)
+      .join(', ');
+    return resumen.length > 0 ? `Distribución de estados de transmutaciones. ${resumen}.` : '';
+  }, [resumenEstados]);
+
   const usoMateriales = useMemo(() => {
     const materialPorId = new Map(materiales.map((material) => [material.id, material.nombre] as const));
     return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
@@ -121,6 +141,17 @@ const Supervisor = () => {
       return acc;
     }, {});
   }, [materiales, transmutaciones]);
+
+  const totalUsoMateriales = useMemo(() => {
+    return Object.values(usoMateriales).reduce((acc, total) => acc + total, 0);
+  }, [usoMateriales]);
+
+  const descripcionMateriales = useMemo(() => {
+    const resumen = Object.entries(usoMateriales)
+      .map(([nombre, total]) => `${nombre}: ${total}`)
+      .join(', ');
+    return resumen.length > 0 ? `Uso de materiales. ${resumen}.` : '';
+  }, [usoMateriales]);
 
   const totalAuditorias = auditorias.length;
 
@@ -156,13 +187,59 @@ const Supervisor = () => {
         {Object.keys(resumenEstados).length === 0 ? (
           <p>No hay transmutaciones registradas.</p>
         ) : (
-          <ul>
-            {Object.entries(resumenEstados).map(([estado, total]) => (
-              <li key={estado}>
-                {estado}: {total}
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul>
+              {Object.entries(resumenEstados).map(([estado, total]) => (
+                <li key={estado}>
+                  {estado}: {total}
+                </li>
+              ))}
+            </ul>
+            {descripcionEstados && (
+              <div
+                role="img"
+                aria-label={descripcionEstados}
+                style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}
+              >
+                {Object.entries(resumenEstados).map(([estado, total]) => {
+                  const porcentaje = totalEstados > 0 ? (total / totalEstados) * 100 : 0;
+                  const color = ESTADO_COLORES[estado] ?? '#3b82f6';
+                  return (
+                    <div
+                      key={`chart-${estado}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1fr) 3fr auto',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <span>{estado}</span>
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          backgroundColor: '#e5e7eb',
+                          height: '1rem',
+                          borderRadius: '9999px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${porcentaje}%`,
+                            backgroundColor: color,
+                            height: '100%',
+                            borderRadius: '9999px',
+                          }}
+                        />
+                      </div>
+                      <span>{total}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </section>
 
@@ -171,13 +248,59 @@ const Supervisor = () => {
         {Object.keys(usoMateriales).length === 0 ? (
           <p>Aún no se registraron consumos de materiales.</p>
         ) : (
-          <ul>
-            {Object.entries(usoMateriales).map(([nombre, total]) => (
-              <li key={nombre}>
-                {nombre}: {total} transmutaciones
-              </li>
-            ))}
-          </ul>
+          <>
+            <ul>
+              {Object.entries(usoMateriales).map(([nombre, total]) => (
+                <li key={nombre}>
+                  {nombre}: {total} transmutaciones
+                </li>
+              ))}
+            </ul>
+            {descripcionMateriales && (
+              <div
+                role="img"
+                aria-label={descripcionMateriales}
+                style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}
+              >
+                {Object.entries(usoMateriales).map(([nombre, total], index) => {
+                  const porcentaje = totalUsoMateriales > 0 ? (total / totalUsoMateriales) * 100 : 0;
+                  const color = MATERIAL_COLORES[index % MATERIAL_COLORES.length];
+                  return (
+                    <div
+                      key={`material-${nombre}`}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'minmax(0, 1fr) 3fr auto',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                      }}
+                    >
+                      <span>{nombre}</span>
+                      <div
+                        aria-hidden="true"
+                        style={{
+                          backgroundColor: '#e5e7eb',
+                          height: '1rem',
+                          borderRadius: '9999px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: `${porcentaje}%`,
+                            backgroundColor: color,
+                            height: '100%',
+                            borderRadius: '9999px',
+                          }}
+                        />
+                      </div>
+                      <span>{total}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
         )}
       </section>
 
