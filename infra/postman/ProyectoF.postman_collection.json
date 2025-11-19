@@ -13,9 +13,9 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/healthz",
+              "raw": "{{healthUrl}}/healthz",
               "host": [
-                "{{baseUrl}}"
+                "{{healthUrl}}"
               ],
               "path": [
                 "healthz"
@@ -56,6 +56,22 @@
         },
         {
           "name": "POST /auth/login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const data = pm.response.json();",
+                  "  if (data.token) {",
+                  "    pm.collectionVariables.set('authToken', data.token);",
+                  "  }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -280,7 +296,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"estado\": \"en_progreso\"\n}"
+              "raw": "{\n  \"estado\": \"pendiente\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/misiones/1",
@@ -532,6 +548,52 @@
           }
         },
         {
+          "name": "POST /transmutaciones/{id}/aprobar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones/1/aprobar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones",
+                "1",
+                "aprobar"
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /transmutaciones/{id}/rechazar",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{authToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/transmutaciones/1/rechazar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "transmutaciones",
+                "1",
+                "rechazar"
+              ]
+            }
+          }
+        },
+        {
           "name": "DELETE /transmutaciones/{id}",
           "request": {
             "method": "DELETE",
@@ -584,8 +646,12 @@
   ],
   "variable": [
     {
-      "key": "baseUrl",
+      "key": "healthUrl",
       "value": "http://localhost:8080"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080/api/v1"
     },
     {
       "key": "authToken",

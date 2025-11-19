@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -38,6 +39,7 @@ const (
 var wsUpgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		origin := r.Header.Get("Origin")
+		// si en el futuro agregas otra URL frontend, la pones aquí
 		return origin == "" || origin == "http://localhost:3000"
 	},
 }
@@ -59,6 +61,7 @@ func NewServer(db *gorm.DB, jwtSecret []byte, redisClient *redis.Client) *Server
 		wsClients:   make(map[*websocket.Conn]struct{}),
 	}
 
+	// si hay redis, escuchamos las notificaciones para mandarlas por websocket
 	if redisClient != nil {
 		go server.listenForNotifications()
 	}
@@ -70,35 +73,46 @@ func (s *Server) Router() http.Handler {
 	router := mux.NewRouter()
 	router.Use(mux.CORSMethodMiddleware(router))
 
+	// salud
 	router.HandleFunc("/healthz", s.handleHealth).Methods(http.MethodGet)
+
+	// websocket
 	router.HandleFunc("/api/v1/ws/notificaciones", s.handleNotificationsWS).Methods(http.MethodGet)
 
+	// prefijo API
 	api := router.PathPrefix("/api/v1").Subrouter()
+
+	// auth pública
 	api.HandleFunc("/auth/register", s.handleRegister).Methods(http.MethodPost)
 	api.HandleFunc("/auth/login", s.handleLogin).Methods(http.MethodPost)
+
+	// preflight
 	api.PathPrefix("/").Methods(http.MethodOptions).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-
 	secured := api.PathPrefix("").Subrouter()
 	secured.Use(s.authMiddleware)
 
+	//alquimistas
 	secured.HandleFunc("/alquimistas", s.handleListAlquimistas).Methods(http.MethodGet)
 	secured.HandleFunc("/alquimistas", s.handleCreateAlquimista).Methods(http.MethodPost)
 	secured.HandleFunc("/alquimistas/{id}", s.handleUpdateAlquimista).Methods(http.MethodPut)
 	secured.HandleFunc("/alquimistas/{id}", s.handleDeleteAlquimista).Methods(http.MethodDelete)
 	secured.HandleFunc("/alquimistas/me", s.handleGetCurrentAlquimista).Methods(http.MethodGet)
 
+	//misiones
 	secured.HandleFunc("/misiones", s.handleListMisiones).Methods(http.MethodGet)
 	secured.HandleFunc("/misiones", s.handleCreateMision).Methods(http.MethodPost)
 	secured.HandleFunc("/misiones/{id}", s.handleUpdateMision).Methods(http.MethodPut)
 	secured.HandleFunc("/misiones/{id}", s.handleDeleteMision).Methods(http.MethodDelete)
 
+	//materiales
 	secured.HandleFunc("/materiales", s.handleListMateriales).Methods(http.MethodGet)
 	secured.HandleFunc("/materiales", s.handleCreateMaterial).Methods(http.MethodPost)
 	secured.HandleFunc("/materiales/{id}", s.handleUpdateMaterial).Methods(http.MethodPut)
 	secured.HandleFunc("/materiales/{id}", s.handleDeleteMaterial).Methods(http.MethodDelete)
 
+	//transmutaciones
 	secured.HandleFunc("/transmutaciones", s.handleListTransmutaciones).Methods(http.MethodGet)
 	secured.HandleFunc("/transmutaciones", s.handleCreateTransmutacion).Methods(http.MethodPost)
 	secured.HandleFunc("/transmutaciones/{id}", s.handleUpdateTransmutacion).Methods(http.MethodPut)
@@ -107,11 +121,22 @@ func (s *Server) Router() http.Handler {
 	secured.HandleFunc("/transmutaciones/{id}/aprobar", s.handleApproveTransmutacion).Methods(http.MethodPost)
 	secured.HandleFunc("/transmutaciones/{id}/rechazar", s.handleRejectTransmutacion).Methods(http.MethodPost)
 
+	//auditorías para el supervisor (CRUD completo)
 	secured.HandleFunc("/auditorias", s.handleListAuditorias).Methods(http.MethodGet)
+	secured.HandleFunc("/auditorias", s.handleCreateAuditoria).Methods(http.MethodPost)
+	secured.HandleFunc("/auditorias/{id}", s.handleUpdateAuditoria).Methods(http.MethodPut)
+	secured.HandleFunc("/auditorias/{id}", s.handleDeleteAuditoria).Methods(http.MethodDelete)
 
+	//CORS
 	cors := handlers.CORS(
 		handlers.AllowedOrigins([]string{"http://localhost:3000"}),
-		handlers.AllowedMethods([]string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions}),
+		handlers.AllowedMethods([]string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodDelete,
+			http.MethodOptions,
+		}),
 		handlers.AllowedHeaders([]string{"Authorization", "Content-Type"}),
 		handlers.AllowCredentials(),
 	)
@@ -475,6 +500,12 @@ func (s *Server) handleGetCurrentAlquimista(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, sanitizeAlquimista(alquimista))
 }
 
+type misionRequest struct {
+	Titulo       string `json:"titulo"`
+	Estado       string `json:"estado"`
+	AlquimistaID uint   `json:"alquimista_id"`
+}
+
 func (s *Server) handleListMisiones(w http.ResponseWriter, r *http.Request) {
 	var misiones []models.Mision
 	if err := s.db.Order("id asc").Find(&misiones).Error; err != nil {
@@ -483,12 +514,6 @@ func (s *Server) handleListMisiones(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, misiones)
-}
-
-type misionRequest struct {
-	Titulo       string `json:"titulo"`
-	Estado       string `json:"estado"`
-	AlquimistaID uint   `json:"alquimista_id"`
 }
 
 func (s *Server) handleCreateMision(w http.ResponseWriter, r *http.Request) {
@@ -725,24 +750,83 @@ func (s *Server) handleCreateTransmutacion(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if *req.Costo < 0 {
+		writeError(w, http.StatusBadRequest, "el costo no puede ser negativo")
+		return
+	}
+
 	if req.Estado == "" {
 		req.Estado = models.EstadoTransmutacionPendiente
 	}
-
 	if _, ok := models.EstadosTransmutacionValidos[req.Estado]; !ok {
 		writeError(w, http.StatusBadRequest, "estado inválido")
 		return
 	}
 
-	transmutacion := models.Transmutacion{
-		AlquimistaID: req.AlquimistaID,
-		MaterialID:   req.MaterialID,
-		Estado:       req.Estado,
-		Costo:        *req.Costo,
-		Resultado:    req.Resultado,
-	}
+	var transmutacion models.Transmutacion
 
-	if err := s.db.Create(&transmutacion).Error; err != nil {
+	txErr := s.db.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
+		//traer material
+		var material models.Material
+		if err := tx.First(&material, req.MaterialID).Error; err != nil {
+			return fmt.Errorf("material no encontrado")
+		}
+
+		//cuánto stock vamos a consumir
+		consumo := int(math.Ceil(*req.Costo))
+		if consumo < 1 {
+			consumo = 1
+		}
+
+		if material.Stock < consumo {
+			return fmt.Errorf(
+				"no hay stock suficiente para este material (disponible: %d, requerido: %d)",
+				material.Stock,
+				consumo,
+			)
+		}
+
+		resultado := strings.TrimSpace(req.Resultado)
+		if resultado == "" {
+			switch material.Nombre {
+			case "Lingote de hierro":
+				resultado = "Lingote de hierro reforzado para uso militar"
+			case "Piedra filosofal sintética":
+				resultado = "Catalizador de alta pureza"
+			case "Sellos de tiza reforzada":
+				resultado = "Círculo de contención mejorado"
+			default:
+				resultado = "Transmutación básica completada"
+			}
+		}
+
+		//descontar stock según el costo
+		material.Stock = material.Stock - consumo
+		if err := tx.Save(&material).Error; err != nil {
+			return err
+		}
+
+		//crear la transmutación
+		t := models.Transmutacion{
+			AlquimistaID: req.AlquimistaID,
+			MaterialID:   req.MaterialID,
+			Estado:       req.Estado,
+			Costo:        *req.Costo,
+			Resultado:    resultado,
+		}
+		if err := tx.Create(&t).Error; err != nil {
+			return err
+		}
+
+		transmutacion = t
+		return nil
+	})
+
+	if txErr != nil {
+		if strings.Contains(txErr.Error(), "material no encontrado") || strings.Contains(txErr.Error(), "no hay stock suficiente") {
+			writeError(w, http.StatusBadRequest, txErr.Error())
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "no se pudo crear la transmutación")
 		return
 	}
@@ -865,6 +949,7 @@ func (s *Server) handleProcessTransmutacion(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "en cola"})
 }
 
+// ====== AQUÍ VA LA VERSIÓN CORREGIDA SIN DESCUENTO DE STOCK ======
 func (s *Server) handleApproveTransmutacion(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSupervisor(r) {
 		writeError(w, http.StatusForbidden, "solo supervisores")
@@ -877,49 +962,65 @@ func (s *Server) handleApproveTransmutacion(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var supervisor models.Alquimista
 	supervisorID, ok := s.currentUserID(r)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
 		return
 	}
 
-	if err := s.db.WithContext(r.Context()).First(&supervisor, supervisorID).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, "no se pudo obtener el supervisor")
-		return
-	}
+	txErr := s.db.WithContext(r.Context()).Transaction(func(tx *gorm.DB) error {
+		var supervisor models.Alquimista
+		if err := tx.First(&supervisor, supervisorID).Error; err != nil {
+			return err
+		}
 
-	var transmutacion models.Transmutacion
-	if err := s.db.WithContext(r.Context()).First(&transmutacion, id).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			writeError(w, http.StatusNotFound, "transmutación no encontrada")
+		var transmutacion models.Transmutacion
+		if err := tx.First(&transmutacion, id).Error; err != nil {
+			return err
+		}
+
+		if transmutacion.Estado == models.EstadoTransmutacionAprobada {
+			return fmt.Errorf("la transmutación ya está aprobada")
+		}
+
+		transmutacion.Estado = models.EstadoTransmutacionAprobada
+		if err := tx.Save(&transmutacion).Error; err != nil {
+			return err
+		}
+
+		audit := models.Auditoria{
+			Tipo:    "transmutaciones_manual",
+			Detalle: fmt.Sprintf("Transmutación %d aprobada por %s.", transmutacion.ID, supervisor.Nombre),
+		}
+		_ = tx.Create(&audit).Error
+
+		return nil
+	})
+
+	if txErr != nil {
+		if strings.Contains(txErr.Error(), "ya está aprobada") {
+			writeError(w, http.StatusBadRequest, txErr.Error())
 			return
 		}
-		writeError(w, http.StatusInternalServerError, "no se pudo obtener la transmutación")
+		writeError(w, http.StatusInternalServerError, "no se pudo aprobar la transmutación")
 		return
 	}
-
-	if transmutacion.Estado == models.EstadoTransmutacionAprobada {
-		writeError(w, http.StatusBadRequest, "la transmutación ya está aprobada")
-		return
-	}
-
-	transmutacion.Estado = models.EstadoTransmutacionAprobada
-	if err := s.db.WithContext(r.Context()).Save(&transmutacion).Error; err != nil {
-		writeError(w, http.StatusInternalServerError, "no se pudo actualizar la transmutación")
-		return
-	}
-
-	s.recordAudit(r.Context(), "transmutaciones_manual", fmt.Sprintf("Transmutación %d aprobada por supervisor %s", transmutacion.ID, supervisor.Nombre))
 
 	if s.redisClient != nil {
-		if err := s.redisClient.Publish(r.Context(), redisNotificationsCh, fmt.Sprintf("%d", transmutacion.ID)).Err(); err != nil {
+		if err := s.redisClient.Publish(r.Context(), redisNotificationsCh, fmt.Sprintf("%d", id)).Err(); err != nil {
 			log.Printf("redis publish error: %v", err)
 		}
 	}
 
-	writeJSON(w, http.StatusOK, transmutacion)
+	var updated models.Transmutacion
+	if err := s.db.WithContext(r.Context()).First(&updated, id).Error; err != nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "aprobado"})
+		return
+	}
+	writeJSON(w, http.StatusOK, updated)
 }
+
+// ===================================================
 
 func (s *Server) handleRejectTransmutacion(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSupervisor(r) {
@@ -1040,6 +1141,11 @@ func (s *Server) broadcastNotification(message string) {
 	}
 }
 
+type auditoriaRequest struct {
+	Tipo    string `json:"tipo"`
+	Detalle string `json:"detalle"`
+}
+
 func (s *Server) handleListAuditorias(w http.ResponseWriter, r *http.Request) {
 	if !s.requireSupervisor(r) {
 		writeError(w, http.StatusForbidden, "solo supervisores")
@@ -1047,7 +1153,7 @@ func (s *Server) handleListAuditorias(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var auditorias []models.Auditoria
-	if err := s.db.Order("id desc").Find(&auditorias).Error; err != nil {
+	if err := s.db.Order("id DESC").Limit(200).Find(&auditorias).Error; err != nil {
 		writeError(w, http.StatusInternalServerError, "no se pudieron obtener las auditorías")
 		return
 	}
@@ -1055,12 +1161,120 @@ func (s *Server) handleListAuditorias(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, auditorias)
 }
 
+func (s *Server) handleCreateAuditoria(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSupervisor(r) {
+		writeError(w, http.StatusForbidden, "solo supervisores")
+		return
+	}
+
+	var req auditoriaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		return
+	}
+
+	tipo := strings.TrimSpace(req.Tipo)
+	detalle := strings.TrimSpace(req.Detalle)
+
+	if tipo == "" {
+		writeError(w, http.StatusBadRequest, "tipo es obligatorio")
+		return
+	}
+
+	audit := models.Auditoria{
+		Tipo:    tipo,
+		Detalle: detalle,
+	}
+
+	if err := s.db.Create(&audit).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo crear la auditoría")
+		return
+	}
+
+	s.recordAudit(r.Context(), "auditorias_create_manual", fmt.Sprintf("Auditoría %d creada manualmente", audit.ID))
+
+	writeJSON(w, http.StatusCreated, audit)
+}
+
+func (s *Server) handleUpdateAuditoria(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSupervisor(r) {
+		writeError(w, http.StatusForbidden, "solo supervisores")
+		return
+	}
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+
+	var req auditoriaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		return
+	}
+
+	var audit models.Auditoria
+	if err := s.db.First(&audit, id).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			writeError(w, http.StatusNotFound, "auditoría no encontrada")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "no se pudo obtener la auditoría")
+		return
+	}
+
+	tipo := strings.TrimSpace(req.Tipo)
+	detalle := strings.TrimSpace(req.Detalle)
+
+	if tipo != "" {
+		audit.Tipo = tipo
+	}
+	if detalle != "" {
+		audit.Detalle = detalle
+	}
+
+	if err := s.db.Save(&audit).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo actualizar la auditoría")
+		return
+	}
+
+	s.recordAudit(r.Context(), "auditorias_update_manual", fmt.Sprintf("Auditoría %d actualizada manualmente", audit.ID))
+
+	writeJSON(w, http.StatusOK, audit)
+}
+
+func (s *Server) handleDeleteAuditoria(w http.ResponseWriter, r *http.Request) {
+	if !s.requireSupervisor(r) {
+		writeError(w, http.StatusForbidden, "solo supervisores")
+		return
+	}
+
+	id, err := strconv.Atoi(mux.Vars(r)["id"])
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "id inválido")
+		return
+	}
+
+	if err := s.db.Delete(&models.Auditoria{}, id).Error; err != nil {
+		writeError(w, http.StatusInternalServerError, "no se pudo eliminar la auditoría")
+		return
+	}
+
+	s.recordAudit(r.Context(), "auditorias_delete_manual", fmt.Sprintf("Auditoría %d eliminada manualmente", id))
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) recordAudit(ctx context.Context, tipo, detalle string) {
 	if tipo == "" {
 		return
 	}
 
-	audit := models.Auditoria{Tipo: tipo, Detalle: detalle}
+	audit := models.Auditoria{
+		Tipo:    tipo,
+		Detalle: detalle,
+	}
 	if err := s.db.WithContext(ctx).Create(&audit).Error; err != nil {
 		fmt.Printf("error saving audit: %v\n", err)
 	}

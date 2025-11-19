@@ -1,6 +1,6 @@
 * text=auto eol=lf
 
-# Explicitly mark common text-based assets
+
 *.go text
 *.ts text
 *.tsx text
@@ -10,7 +10,7 @@
 *.yaml text
 *.json text
 
-# Ensure images or other binaries (if any appear) are never treated as text
+
 *.png binary
 *.jpg binary
 *.jpeg binary

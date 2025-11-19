@@ -42,6 +42,7 @@ type Alquimista struct {
 	Especialidad string    `json:"especialidad"`
 	PasswordHash string    `gorm:"not null" json:"-"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Alquimista) TableName() string {
@@ -54,6 +55,7 @@ type Mision struct {
 	Estado       string    `gorm:"type:varchar(20);not null" json:"estado"`
 	AlquimistaID uint      `gorm:"not null" json:"alquimista_id"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Mision) TableName() string {
@@ -65,6 +67,7 @@ type Material struct {
 	Nombre    string    `gorm:"uniqueIndex;not null" json:"nombre"`
 	Stock     int       `gorm:"not null" json:"stock"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Material) TableName() string {
@@ -79,6 +82,7 @@ type Transmutacion struct {
 	Costo        float64   `gorm:"not null" json:"costo"`
 	Resultado    string    `gorm:"type:text" json:"resultado"`
 	CreatedAt    time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Transmutacion) TableName() string {
@@ -90,6 +94,7 @@ type Auditoria struct {
 	Tipo      string    `gorm:"not null" json:"tipo"`
 	Detalle   string    `gorm:"type:text" json:"detalle"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 func (Auditoria) TableName() string {

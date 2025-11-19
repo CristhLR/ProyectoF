@@ -1,50 +1,54 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client.ts';
-import type { AuthResponse } from './Login.tsx';
-import { persistAuthSession } from './Login.tsx';
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { apiFetch } from "../api/client";
+import type { AuthResponse } from "./Login";
+import { persistAuthSession } from "./Login";
 
-const ROLES_VALIDOS: Array<AuthResponse['user']['rango']> = ['alquimista', 'supervisor'];
+const ROLES_VALIDOS: Array<AuthResponse["user"]["rango"]> = [
+  "alquimista",
+  "supervisor",
+];
 
 const Register = () => {
   const navigate = useNavigate();
-  const [nombre, setNombre] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [especialidad, setEspecialidad] = useState('');
-  const [rango, setRango] = useState<AuthResponse['user']['rango']>('alquimista');
+
+  const [nombre, setNombre] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [especialidad, setEspecialidad] = useState("");
+  const [rango, setRango] =
+    useState<AuthResponse["user"]["rango"]>("alquimista");
+
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const canSubmit = useMemo(() => {
-    return (
-      nombre.trim() !== '' &&
-      email.trim() !== '' &&
-      password.trim() !== '' &&
-      ROLES_VALIDOS.includes(rango)
-    );
-  }, [email, nombre, password, rango]);
-
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    const role = localStorage.getItem('role');
+    const token = localStorage.getItem("token");
+    const role = localStorage.getItem("role");
     if (token && role) {
-      navigate(role === 'supervisor' ? '/supervisor' : '/', { replace: true });
+      navigate(role === "supervisor" ? "/supervisor" : "/", { replace: true });
     }
   }, [navigate]);
 
+  const canSubmit = useMemo(() => {
+    return (
+      nombre.trim() !== "" &&
+      email.trim() !== "" &&
+      password.trim() !== "" &&
+      ROLES_VALIDOS.includes(rango)
+    );
+  }, [nombre, email, password, rango]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!canSubmit) {
-      return;
-    }
+    if (!canSubmit) return;
 
     setError(null);
     setLoading(true);
 
     try {
-      const data = await apiFetch<AuthResponse>('/auth/register', {
-        method: 'POST',
+      // 1) registrar en el backend
+      await apiFetch("/auth/register", {
+        method: "POST",
         body: JSON.stringify({
           nombre,
           email,
@@ -54,8 +58,19 @@ const Register = () => {
         }),
       });
 
-      persistAuthSession(data);
-      navigate(data.user.rango === 'supervisor' ? '/supervisor' : '/', { replace: true });
+      const loginData = await apiFetch<AuthResponse>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+        }),
+      });
+
+      persistAuthSession(loginData);
+
+      navigate(loginData.user.rango === "supervisor" ? "/supervisor" : "/", {
+        replace: true,
+      });
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -64,10 +79,10 @@ const Register = () => {
   };
 
   return (
-    <main>
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: "1.5rem" }}>
       <h1>Crear cuenta</h1>
       <form onSubmit={handleSubmit}>
-        <div>
+        <div style={{ marginBottom: "0.75rem" }}>
           <label htmlFor="nombre">Nombre</label>
           <input
             id="nombre"
@@ -77,7 +92,8 @@ const Register = () => {
             required
           />
         </div>
-        <div>
+
+        <div style={{ marginBottom: "0.75rem" }}>
           <label htmlFor="email">Email</label>
           <input
             id="email"
@@ -87,7 +103,8 @@ const Register = () => {
             required
           />
         </div>
-        <div>
+
+        <div style={{ marginBottom: "0.75rem" }}>
           <label htmlFor="password">Password</label>
           <input
             id="password"
@@ -97,7 +114,8 @@ const Register = () => {
             required
           />
         </div>
-        <div>
+
+        <div style={{ marginBottom: "0.75rem" }}>
           <label htmlFor="especialidad">Especialidad (opcional)</label>
           <input
             id="especialidad"
@@ -107,12 +125,15 @@ const Register = () => {
             placeholder="Ej. Transmutación avanzada"
           />
         </div>
-        <div>
+
+        <div style={{ marginBottom: "0.75rem" }}>
           <label htmlFor="rango">Rango</label>
           <select
             id="rango"
             value={rango}
-            onChange={(event) => setRango(event.target.value as AuthResponse['user']['rango'])}
+            onChange={(event) =>
+              setRango(event.target.value as AuthResponse["user"]["rango"])
+            }
             required
           >
             {ROLES_VALIDOS.map((rol) => (
@@ -122,12 +143,19 @@ const Register = () => {
             ))}
           </select>
         </div>
+
         <button type="submit" disabled={loading || !canSubmit}>
-          {loading ? 'Creando cuenta...' : 'Registrarse'}
+          {loading ? "Creando cuenta..." : "Registrarse"}
         </button>
       </form>
-      {error && <p role="alert">{error}</p>}
-      <p>
+
+      {error && (
+        <p role="alert" style={{ color: "red", marginTop: "1rem" }}>
+          {error}
+        </p>
+      )}
+
+      <p style={{ marginTop: "1rem" }}>
         ¿Ya tienes cuenta? <Link to="/login">Inicia sesión</Link>
       </p>
     </main>

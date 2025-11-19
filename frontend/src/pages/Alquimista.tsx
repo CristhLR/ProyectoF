@@ -1,6 +1,6 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client.ts';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../api/client.ts";
 
 type User = {
   id: number;
@@ -33,11 +33,11 @@ type Transmutacion = {
 const Alquimista = () => {
   const navigate = useNavigate();
   const user = useMemo<User | null>(() => {
-    if (typeof window === 'undefined') {
+    if (typeof window === "undefined") {
       return null;
     }
 
-    const stored = localStorage.getItem('user');
+    const stored = localStorage.getItem("user");
     if (!stored) {
       return null;
     }
@@ -45,7 +45,7 @@ const Alquimista = () => {
     try {
       return JSON.parse(stored) as User;
     } catch (err) {
-      console.error('No se pudo parsear el usuario almacenado', err);
+      console.error("No se pudo parsear el usuario almacenado", err);
       return null;
     }
   }, []);
@@ -53,8 +53,8 @@ const Alquimista = () => {
   const [misiones, setMisiones] = useState<Mision[]>([]);
   const [materiales, setMateriales] = useState<Material[]>([]);
   const [transmutaciones, setTransmutaciones] = useState<Transmutacion[]>([]);
-  const [selectedMaterial, setSelectedMaterial] = useState('');
-  const [costo, setCosto] = useState('');
+  const [selectedMaterial, setSelectedMaterial] = useState("");
+  const [costo, setCosto] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState<string[]>([]);
@@ -64,17 +64,17 @@ const Alquimista = () => {
       return;
     }
 
-    const data = await apiFetch<Transmutacion[]>('/transmutaciones');
+    const data = await apiFetch<Transmutacion[]>("/transmutaciones");
     setTransmutaciones(
       data
         .filter((item) => item.alquimista_id === user.id)
-        .sort((a, b) => a.id - b.id),
+        .sort((a, b) => a.id - b.id)
     );
   }, [user]);
 
   useEffect(() => {
     if (!user) {
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
 
@@ -83,15 +83,17 @@ const Alquimista = () => {
     const loadData = async () => {
       try {
         const [misionesData, materialesData] = await Promise.all([
-          apiFetch<Mision[]>('/misiones'),
-          apiFetch<Material[]>('/materiales'),
+          apiFetch<Mision[]>("/misiones"),
+          apiFetch<Material[]>("/materiales"),
         ]);
 
         if (!active) {
           return;
         }
 
-        setMisiones(misionesData.filter((mision) => mision.alquimista_id === user.id));
+        setMisiones(
+          misionesData.filter((mision) => mision.alquimista_id === user.id)
+        );
         setMateriales(materialesData);
         await fetchTransmutaciones();
       } catch (err) {
@@ -109,7 +111,7 @@ const Alquimista = () => {
   }, [fetchTransmutaciones, navigate, user]);
 
   useEffect(() => {
-    const wsBase = import.meta.env.VITE_API_WS_URL ?? 'ws://localhost:8080';
+    const wsBase = import.meta.env.VITE_API_WS_URL ?? "ws://localhost:8080";
     const socket = new WebSocket(`${wsBase}/api/v1/ws/notificaciones`);
 
     socket.onmessage = (event) => {
@@ -117,7 +119,7 @@ const Alquimista = () => {
     };
 
     socket.onerror = () => {
-      console.error('Error en la conexión de WebSocket');
+      console.error("Error en la conexión de WebSocket");
     };
 
     return () => {
@@ -125,16 +127,18 @@ const Alquimista = () => {
     };
   }, []);
 
-  const handleCreateTransmutacion = async (event: FormEvent<HTMLFormElement>) => {
+  const handleCreateTransmutacion = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
     event.preventDefault();
 
     if (!user) {
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
 
     if (!selectedMaterial || !costo) {
-      setError('Selecciona un material e ingresa un costo');
+      setError("Selecciona un material e ingresa un costo");
       return;
     }
 
@@ -143,8 +147,8 @@ const Alquimista = () => {
 
     try {
       const costoValue = parseFloat(costo);
-      const nueva = await apiFetch<Transmutacion>('/transmutaciones', {
-        method: 'POST',
+      await apiFetch<Transmutacion>("/transmutaciones", {
+        method: "POST",
         body: JSON.stringify({
           alquimista_id: user.id,
           material_id: Number(selectedMaterial),
@@ -152,9 +156,13 @@ const Alquimista = () => {
         }),
       });
 
-      setTransmutaciones((prev) => [...prev, nueva].sort((a, b) => a.id - b.id));
-      setSelectedMaterial('');
-      setCosto('');
+      const materialesActualizados = await apiFetch<Material[]>("/materiales");
+      setMateriales(materialesActualizados);
+
+      await fetchTransmutaciones();
+
+      setSelectedMaterial("");
+      setCosto("");
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -165,7 +173,7 @@ const Alquimista = () => {
   const handleProcesar = async (id: number) => {
     setError(null);
     try {
-      await apiFetch(`/transmutaciones/${id}/procesar`, { method: 'POST' });
+      await apiFetch(`/transmutaciones/${id}/procesar`, { method: "POST" });
       await fetchTransmutaciones();
     } catch (err) {
       setError((err as Error).message);
@@ -245,7 +253,7 @@ const Alquimista = () => {
             />
           </div>
           <button type="submit" disabled={loading}>
-            {loading ? 'Creando...' : 'Crear transmutación'}
+            {loading ? "Creando..." : "Crear transmutación"}
           </button>
         </form>
       </section>
@@ -255,7 +263,7 @@ const Alquimista = () => {
         {transmutaciones.length === 0 ? (
           <p>Todavía no creaste transmutaciones.</p>
         ) : (
-          <div style={{ overflowX: 'auto' }}>
+          <div style={{ overflowX: "auto" }}>
             <table>
               <thead>
                 <tr>
@@ -274,12 +282,12 @@ const Alquimista = () => {
                     <td>{obtenerNombreMaterial(transmutacion.material_id)}</td>
                     <td>{transmutacion.estado}</td>
                     <td>{transmutacion.costo.toFixed(2)}</td>
-                    <td>{transmutacion.resultado ?? '—'}</td>
+                    <td>{transmutacion.resultado ?? "—"}</td>
                     <td>
                       <button
                         type="button"
                         onClick={() => handleProcesar(transmutacion.id)}
-                        disabled={transmutacion.estado !== 'pendiente'}
+                        disabled={transmutacion.estado !== "pendiente"}
                       >
                         Procesar
                       </button>

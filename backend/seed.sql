@@ -1,6 +1,3 @@
--- Datos de demostración para "Gestión Alquímica Estatal"
--- Ejecutar este script sobre una base PostgreSQL vacía.
-
 BEGIN;
 
 INSERT INTO alquimistas (id, nombre, email, rango, especialidad, password_hash)

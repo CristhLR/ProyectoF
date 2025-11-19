@@ -1,23 +1,32 @@
-# syntax=docker/dockerfile:1
-
-FROM node:22-alpine AS base
+FROM node:22 AS build
 WORKDIR /app
 
-FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm ci
 
-FROM base AS build
-COPY --from=deps /app/node_modules ./node_modules
+COPY package.json package-lock.json ./
+
+
+RUN npm ci --include=dev
+
+
+RUN npm install -g vite@5.2.0
+
+
 COPY . .
-RUN npm run build
 
-FROM node:22-alpine AS runner
+
+RUN npm pkg set scripts.build="vite build"
+
+
+RUN vite build
+
+
+FROM node:22 AS runner
 WORKDIR /app
-ENV NODE_ENV=production
-COPY --from=deps /app/node_modules ./node_modules
+
+
+RUN npm install -g serve
+
 COPY --from=build /app/dist ./dist
-COPY package.json package-lock.json ./
 
 EXPOSE 3000
-CMD ["npm", "run", "preview", "--", "--host", "0.0.0.0", "--port", "3000"]
+CMD ["serve", "-s", "dist", "-l", "3000"]

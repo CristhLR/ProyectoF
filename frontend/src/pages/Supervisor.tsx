@@ -1,6 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { apiFetch } from '../api/client.ts';
+// frontend/src/pages/Supervisor.tsx
+import { useCallback, useEffect, useMemo, useState, FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { apiFetch } from "../api/client.ts";
+import MaterialUsageChart from "../components/MaterialUsageChart";
 
 type Transmutacion = {
   id: number;
@@ -25,50 +27,76 @@ type Material = {
 };
 
 const ESTADO_COLORES: Record<string, string> = {
-  aprobada: '#16a34a',
-  pendiente: '#f59e0b',
-  procesando: '#6366f1',
-  rechazada: '#dc2626',
+  aprobada: "#16a34a",
+  pendiente: "#f59e0b",
+  procesando: "#6366f1",
+  rechazada: "#dc2626",
 };
 
-const MATERIAL_COLORES: string[] = ['#0ea5e9', '#8b5cf6', '#f97316', '#22c55e', '#ec4899', '#6366f1'];
+const MATERIAL_COLORES: string[] = [
+  "#0ea5e9",
+  "#8b5cf6",
+  "#f97316",
+  "#22c55e",
+  "#ec4899",
+  "#6366f1",
+];
 
 const Supervisor = () => {
   const navigate = useNavigate();
+
   const [transmutaciones, setTransmutaciones] = useState<Transmutacion[]>([]);
   const [auditorias, setAuditorias] = useState<Auditoria[]>([]);
   const [materiales, setMateriales] = useState<Material[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // estado para el formulario de creación de auditorías
+  const [newAuditTipo, setNewAuditTipo] = useState("");
+  const [newAuditDetalle, setNewAuditDetalle] = useState("");
+
   const loadData = useCallback(
     async (options?: { shouldIgnore?: () => boolean }) => {
-      const [transmutacionesData, auditoriasData, materialesData] = await Promise.all([
-        apiFetch<Transmutacion[]>('/transmutaciones'),
-        apiFetch<Auditoria[]>('/auditorias'),
-        apiFetch<Material[]>('/materiales'),
+      // hacemos las llamadas por separado para que si /auditorias no existe no se caiga todo
+      const [transRes, matRes, audRes] = await Promise.allSettled([
+        apiFetch<Transmutacion[]>("/transmutaciones"),
+        apiFetch<Material[]>("/materiales"),
+        apiFetch<Auditoria[]>("/auditorias"),
       ]);
 
-      if (options?.shouldIgnore?.()) {
-        return;
+      if (options?.shouldIgnore?.()) return;
+
+      if (transRes.status === "fulfilled") {
+        setTransmutaciones(transRes.value);
+      } else {
+        setError(
+          transRes.reason instanceof Error
+            ? transRes.reason.message
+            : "Error al cargar transmutaciones"
+        );
       }
 
-      setTransmutaciones(transmutacionesData);
-      setAuditorias(auditoriasData);
-      setMateriales(materialesData);
+      if (matRes.status === "fulfilled") {
+        setMateriales(matRes.value);
+      }
+
+      if (audRes.status === "fulfilled") {
+        setAuditorias(audRes.value);
+      }
     },
     []
   );
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    // proteger la ruta
+    const token = localStorage.getItem("token");
     if (!token) {
-      navigate('/login', { replace: true });
+      navigate("/login", { replace: true });
       return;
     }
 
-    const role = localStorage.getItem('role');
-    if (role && role !== 'supervisor') {
-      navigate('/', { replace: true });
+    const role = localStorage.getItem("role");
+    if (role && role !== "supervisor") {
+      navigate("/", { replace: true });
       return;
     }
 
@@ -92,14 +120,14 @@ const Supervisor = () => {
 
     for (const transmutacion of transmutaciones) {
       switch (transmutacion.estado) {
-        case 'aprobada':
+        case "aprobada":
           aprobadas += 1;
           break;
-        case 'pendiente':
-        case 'procesando':
+        case "pendiente":
+        case "procesando":
           pendientes += 1;
           break;
-        case 'rechazada':
+        case "rechazada":
           rechazadas += 1;
           break;
         default:
@@ -116,10 +144,13 @@ const Supervisor = () => {
   }, [transmutaciones]);
 
   const resumenEstados = useMemo(() => {
-    return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
-      acc[transmutacion.estado] = (acc[transmutacion.estado] ?? 0) + 1;
-      return acc;
-    }, {});
+    return transmutaciones.reduce<Record<string, number>>(
+      (acc, transmutacion) => {
+        acc[transmutacion.estado] = (acc[transmutacion.estado] ?? 0) + 1;
+        return acc;
+      },
+      {}
+    );
   }, [transmutaciones]);
 
   const totalEstados = useMemo(() => {
@@ -129,17 +160,26 @@ const Supervisor = () => {
   const descripcionEstados = useMemo(() => {
     const resumen = Object.entries(resumenEstados)
       .map(([estado, total]) => `${estado}: ${total}`)
-      .join(', ');
-    return resumen.length > 0 ? `Distribución de estados de transmutaciones. ${resumen}.` : '';
+      .join(", ");
+    return resumen.length > 0
+      ? `Distribución de estados de transmutaciones. ${resumen}.`
+      : "";
   }, [resumenEstados]);
 
   const usoMateriales = useMemo(() => {
-    const materialPorId = new Map(materiales.map((material) => [material.id, material.nombre] as const));
-    return transmutaciones.reduce<Record<string, number>>((acc, transmutacion) => {
-      const nombre = materialPorId.get(transmutacion.material_id) ?? `Material ${transmutacion.material_id}`;
-      acc[nombre] = (acc[nombre] ?? 0) + 1;
-      return acc;
-    }, {});
+    const materialPorId = new Map(
+      materiales.map((material) => [material.id, material.nombre] as const)
+    );
+    return transmutaciones.reduce<Record<string, number>>(
+      (acc, transmutacion) => {
+        const nombre =
+          materialPorId.get(transmutacion.material_id) ??
+          `Material ${transmutacion.material_id}`;
+        acc[nombre] = (acc[nombre] ?? 0) + 1;
+        return acc;
+      },
+      {}
+    );
   }, [materiales, transmutaciones]);
 
   const totalUsoMateriales = useMemo(() => {
@@ -149,15 +189,20 @@ const Supervisor = () => {
   const descripcionMateriales = useMemo(() => {
     const resumen = Object.entries(usoMateriales)
       .map(([nombre, total]) => `${nombre}: ${total}`)
-      .join(', ');
-    return resumen.length > 0 ? `Uso de materiales. ${resumen}.` : '';
+      .join(", ");
+    return resumen.length > 0 ? `Uso de materiales. ${resumen}.` : "";
   }, [usoMateriales]);
 
   const totalAuditorias = auditorias.length;
 
-  const gestionarTransmutacion = async (id: number, accion: 'aprobar' | 'rechazar') => {
+  const gestionarTransmutacion = async (
+    id: number,
+    accion: "aprobar" | "rechazar"
+  ) => {
     try {
-      await apiFetch(`/transmutaciones/${id}/${accion}`, { method: 'POST' });
+      await apiFetch(`/transmutaciones/${id}/${accion}`, {
+        method: "POST",
+      });
       await loadData();
       setError(null);
     } catch (err) {
@@ -165,24 +210,147 @@ const Supervisor = () => {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    localStorage.removeItem("role");
+    localStorage.removeItem("user");
+    navigate("/login", { replace: true });
+  };
+
+  // ================================
+  // CRUD de auditorías (front)
+  // ================================
+
+  const handleCreateAuditoria = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const tipo = newAuditTipo.trim();
+    const detalle = newAuditDetalle.trim();
+
+    if (!tipo) {
+      setError("El campo 'tipo' es obligatorio para crear una auditoría.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const creada = await apiFetch<Auditoria>("/auditorias", {
+        method: "POST",
+        body: JSON.stringify({
+          tipo,
+          detalle,
+        }),
+      });
+
+      // la agregamos al inicio de la lista para que se vea el cambio enseguida
+      setAuditorias((prev) => [creada, ...prev]);
+      setNewAuditTipo("");
+      setNewAuditDetalle("");
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleUpdateAuditoriaDetalle = async (auditoria: Auditoria) => {
+    const nuevoDetalle = window.prompt(
+      "Nuevo detalle para la auditoría:",
+      auditoria.detalle
+    );
+
+    if (nuevoDetalle === null) {
+      // cancelado
+      return;
+    }
+
+    const trimmed = nuevoDetalle.trim();
+    if (!trimmed) {
+      setError("El detalle no puede estar vacío.");
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const actualizada = await apiFetch<Auditoria>(
+        `/auditorias/${auditoria.id}`,
+        {
+          method: "PUT",
+          body: JSON.stringify({
+            // solo mandamos detalle, el backend deja igual el tipo
+            detalle: trimmed,
+          }),
+        }
+      );
+
+      setAuditorias((prev) =>
+        prev.map((a) => (a.id === auditoria.id ? actualizada : a))
+      );
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  const handleDeleteAuditoria = async (id: number) => {
+    const confirmar = window.confirm(
+      `¿Seguro que quieres eliminar la auditoría #${id}?`
+    );
+    if (!confirmar) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      await apiFetch<void>(`/auditorias/${id}`, {
+        method: "DELETE",
+      });
+
+      setAuditorias((prev) => prev.filter((a) => a.id !== id));
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
   return (
-    <main>
-      <h1>Panel de Supervisor</h1>
+    <main style={{ maxWidth: "1100px", margin: "0 auto", padding: "1.5rem" }}>
+      <header
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "1.5rem",
+        }}
+      >
+        <h1>Panel de Supervisor</h1>
+        <button type="button" onClick={handleLogout}>
+          Salir
+        </button>
+      </header>
 
-      {error && <p role="alert">{error}</p>}
+      {error && (
+        <p role="alert" style={{ color: "red" }}>
+          {error}
+        </p>
+      )}
 
-      <section>
+      <section style={{ marginBottom: "1.5rem" }}>
         <h2>Resumen</h2>
         <ul>
           <li>Total de transmutaciones: {resumenGeneral.total}</li>
           <li>Transmutaciones aprobadas: {resumenGeneral.aprobadas}</li>
-          <li>Transmutaciones pendientes/procesando: {resumenGeneral.pendientes}</li>
+          <li>
+            Transmutaciones pendientes/procesando: {resumenGeneral.pendientes}
+          </li>
           <li>Transmutaciones rechazadas: {resumenGeneral.rechazadas}</li>
           <li>Total de auditorías: {totalAuditorias}</li>
         </ul>
       </section>
 
-      <section>
+      {/* gráfica nueva basada en /materiales y /transmutaciones */}
+      <MaterialUsageChart />
+
+      <section style={{ marginBottom: "1.5rem" }}>
         <h2>Resumen de transmutaciones</h2>
         {Object.keys(resumenEstados).length === 0 ? (
           <p>No hay transmutaciones registradas.</p>
@@ -199,37 +367,42 @@ const Supervisor = () => {
               <div
                 role="img"
                 aria-label={descripcionEstados}
-                style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  marginTop: "1rem",
+                }}
               >
                 {Object.entries(resumenEstados).map(([estado, total]) => {
-                  const porcentaje = totalEstados > 0 ? (total / totalEstados) * 100 : 0;
-                  const color = ESTADO_COLORES[estado] ?? '#3b82f6';
+                  const porcentaje =
+                    totalEstados > 0 ? (total / totalEstados) * 100 : 0;
+                  const color = ESTADO_COLORES[estado] ?? "#3b82f6";
                   return (
                     <div
                       key={`chart-${estado}`}
                       style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) 3fr auto',
-                        alignItems: 'center',
-                        gap: '0.5rem',
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) 3fr auto",
+                        alignItems: "center",
+                        gap: "0.5rem",
                       }}
                     >
                       <span>{estado}</span>
                       <div
                         aria-hidden="true"
                         style={{
-                          backgroundColor: '#e5e7eb',
-                          height: '1rem',
-                          borderRadius: '9999px',
-                          overflow: 'hidden',
+                          backgroundColor: "#e5e7eb",
+                          height: "1rem",
+                          borderRadius: "9999px",
+                          overflow: "hidden",
                         }}
                       >
                         <div
                           style={{
                             width: `${porcentaje}%`,
                             backgroundColor: color,
-                            height: '100%',
-                            borderRadius: '9999px',
+                            height: "100%",
+                            borderRadius: "9999px",
                           }}
                         />
                       </div>
@@ -243,7 +416,7 @@ const Supervisor = () => {
         )}
       </section>
 
-      <section>
+      <section style={{ marginBottom: "1.5rem" }}>
         <h2>Uso de materiales</h2>
         {Object.keys(usoMateriales).length === 0 ? (
           <p>Aún no se registraron consumos de materiales.</p>
@@ -260,37 +433,45 @@ const Supervisor = () => {
               <div
                 role="img"
                 aria-label={descripcionMateriales}
-                style={{ display: 'grid', gap: '0.75rem', marginTop: '1rem' }}
+                style={{
+                  display: "grid",
+                  gap: "0.75rem",
+                  marginTop: "1rem",
+                }}
               >
                 {Object.entries(usoMateriales).map(([nombre, total], index) => {
-                  const porcentaje = totalUsoMateriales > 0 ? (total / totalUsoMateriales) * 100 : 0;
-                  const color = MATERIAL_COLORES[index % MATERIAL_COLORES.length];
+                  const porcentaje =
+                    totalUsoMateriales > 0
+                      ? (total / totalUsoMateriales) * 100
+                      : 0;
+                  const color =
+                    MATERIAL_COLORES[index % MATERIAL_COLORES.length];
                   return (
                     <div
                       key={`material-${nombre}`}
                       style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'minmax(0, 1fr) 3fr auto',
-                        alignItems: 'center',
-                        gap: '0.5rem',
+                        display: "grid",
+                        gridTemplateColumns: "minmax(0, 1fr) 3fr auto",
+                        alignItems: "center",
+                        gap: "0.5rem",
                       }}
                     >
                       <span>{nombre}</span>
                       <div
                         aria-hidden="true"
                         style={{
-                          backgroundColor: '#e5e7eb',
-                          height: '1rem',
-                          borderRadius: '9999px',
-                          overflow: 'hidden',
+                          backgroundColor: "#e5e7eb",
+                          height: "1rem",
+                          borderRadius: "9999px",
+                          overflow: "hidden",
                         }}
                       >
                         <div
                           style={{
                             width: `${porcentaje}%`,
                             backgroundColor: color,
-                            height: '100%',
-                            borderRadius: '9999px',
+                            height: "100%",
+                            borderRadius: "9999px",
                           }}
                         />
                       </div>
@@ -304,24 +485,37 @@ const Supervisor = () => {
         )}
       </section>
 
-      <section>
+      <section style={{ marginBottom: "1.5rem" }}>
         <h2>Transmutaciones</h2>
         {transmutaciones.length === 0 ? (
           <p>No hay transmutaciones registradas.</p>
         ) : (
           <ul>
             {transmutaciones.map((transmutacion) => (
-              <li key={transmutacion.id}>
-                #{transmutacion.id} - Alquimista {transmutacion.alquimista_id} - Material {transmutacion.material_id} - Estado: {transmutacion.estado} - Costo: {transmutacion.costo}
-                {transmutacion.resultado && ` - Resultado: ${transmutacion.resultado}`}
-                {(transmutacion.estado === 'pendiente' || transmutacion.estado === 'procesando') && (
+              <li key={transmutacion.id} style={{ marginBottom: "0.5rem" }}>
+                #{transmutacion.id} - Alquimista {transmutacion.alquimista_id} -
+                Material {transmutacion.material_id} - Estado:{" "}
+                {transmutacion.estado} - Costo: {transmutacion.costo}
+                {transmutacion.resultado &&
+                  ` - Resultado: ${transmutacion.resultado}`}
+                {(transmutacion.estado === "pendiente" ||
+                  transmutacion.estado === "procesando") && (
                   <span>
-                    {' '}
-                    <button type="button" onClick={() => gestionarTransmutacion(transmutacion.id, 'aprobar')}>
+                    {" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        gestionarTransmutacion(transmutacion.id, "aprobar")
+                      }
+                    >
                       Aprobar
-                    </button>
-                    {' '}
-                    <button type="button" onClick={() => gestionarTransmutacion(transmutacion.id, 'rechazar')}>
+                    </button>{" "}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        gestionarTransmutacion(transmutacion.id, "rechazar")
+                      }
+                    >
                       Rechazar
                     </button>
                   </span>
@@ -334,13 +528,52 @@ const Supervisor = () => {
 
       <section>
         <h2>Auditorías</h2>
+
+        {/* FORMULARIO PARA CREAR UNA AUDITORÍA MANUAL */}
+        <form onSubmit={handleCreateAuditoria} style={{ marginBottom: "1rem" }}>
+          <div style={{ marginBottom: "0.5rem" }}>
+            <label htmlFor="audit-tipo">Tipo</label>
+            <input
+              id="audit-tipo"
+              type="text"
+              value={newAuditTipo}
+              onChange={(event) => setNewAuditTipo(event.target.value)}
+              required
+            />
+          </div>
+          <div style={{ marginBottom: "0.5rem" }}>
+            <label htmlFor="audit-detalle">Detalle</label>
+            <input
+              id="audit-detalle"
+              type="text"
+              value={newAuditDetalle}
+              onChange={(event) => setNewAuditDetalle(event.target.value)}
+              placeholder="Descripción de la auditoría"
+            />
+          </div>
+          <button type="submit">Crear auditoría</button>
+        </form>
+
         {auditorias.length === 0 ? (
           <p>No hay auditorías registradas.</p>
         ) : (
           <ul>
             {auditorias.map((auditoria) => (
               <li key={auditoria.id}>
-                [{new Date(auditoria.created_at).toLocaleString()}] {auditoria.tipo} - {auditoria.detalle}
+                [{new Date(auditoria.created_at).toLocaleString()}]{" "}
+                {auditoria.tipo} - {auditoria.detalle}{" "}
+                <button
+                  type="button"
+                  onClick={() => handleUpdateAuditoriaDetalle(auditoria)}
+                >
+                  Editar
+                </button>{" "}
+                <button
+                  type="button"
+                  onClick={() => handleDeleteAuditoria(auditoria.id)}
+                >
+                  Eliminar
+                </button>
               </li>
             ))}
           </ul>
